@@ -5,8 +5,10 @@ import logging
 import optparse
 import sys
 import xml.sax.saxutils
+from Acquisition import aq_base
 from DateTime import DateTime
 from Products.Archetypes.public import ImageField
+from Products.CMFCore.utils import getToolByName
 from ZODB.POSException import ConflictError
 
 logger = logging.getLogger('simple-dumper')
@@ -24,16 +26,17 @@ class SimplerXMLGenerator(xml.sax.saxutils.XMLGenerator):
 def run(app):
     options, args = parse_args()
     ob = app.unrestrictedTraverse(options.item_path)
-
+    discussion_tool = getToolByName(ob, 'portal_discussion')
     if options.out_file:
         out = open(options.out_file, 'w')
     else:
         out = sys.stdout
 
     handler = SimplerXMLGenerator(out, 'utf-8')        
-    export(handler, ob, out)
+    export(handler, ob, out, discussion_tool)
 
-def export(handler, ob, out):
+def export(handler, ob, out, dt):
+    dt = getToolByName(ob, 'portal_discussion')
     handler.startElement(ob.meta_type, {})
     for field in ob.Schema().filterFields():
         field_name = field.getName()
@@ -70,11 +73,35 @@ def export(handler, ob, out):
             value = unicode(value ) # Hope for the best!
         handler.addQuickElement(field_name, unicode(value))
         
+    # Dump any discussions, too
+    if dt.isDiscussionAllowedFor(ob):
+        r = dt.getDiscussionFor(ob)
+        if r.objectIds():
+            acl_users = getToolByName(ob, 'acl_users')
+            
+            handler.startElement('discussion', {})
+            for reply in r.objectValues():
+                export_discussion(handler, reply, dt, acl_users)
+            handler.endElement('discussion')
 
     if ob.isPrincipiaFolderish:
         for subob in ob.objectValues():
-            export(handler, subob, out)
+            export(handler, subob, out, dt)
     handler.endElement(ob.meta_type)
+    
+def export_discussion(handler, ob, dt, acl_users):
+    handler.startElement('reply', {})
+    for creator in ob.listCreators():
+        user = acl_users.getUserById(creator)
+        handler.startElement('creator', {})
+        handler.addQuickElement('id', user.getId())
+        handler.endElement('creator')
+    handler.addQuickElement('text', ob.text, {'text-format': ob.text_format})        
+    handler.addQuickElement('date', ob.modified().rfc822())
+    if dt.isDiscussionAllowedFor(ob) and getattr(aq_base(ob), 'talkback', None):
+        for reply in dt.getDiscussionFor(ob):
+            export_discussion(handler, reply, dt, acl_users)
+    handler.endElement('reply')
 
 def parse_args():
     parser = optparse.OptionParser()
