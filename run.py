@@ -1,10 +1,12 @@
 # Simple Zope instance script to dump out SimpleBlog entries with their
 # comments to an XML format
+import base64
 import logging
 import optparse
 import sys
 import xml.sax.saxutils
 from DateTime import DateTime
+from Products.Archetypes.public import ImageField
 from ZODB.POSException import ConflictError
 
 logger = logging.getLogger('simple-dumper')
@@ -35,6 +37,13 @@ def export(handler, ob, out):
     handler.startElement(ob.meta_type, {})
     for field in ob.Schema().filterFields():
         field_name = field.getName()
+        if isinstance(field, ImageField):
+            handler.addQuickElement('filename', field.getFilename(ob))   
+            handler.addQuickElement('content-type', field.getContentType(ob))
+            data = field.get(ob, raw=True).get_data()
+            handler.addQuickElement('data', attrs={'encoding': 'base64'},
+                contents=base64.b64encode(data))
+            continue
         try:
             value = field.get(ob)
         except ConflictError:
@@ -60,6 +69,7 @@ def export(handler, ob, out):
         if not isinstance(value, unicode):
             value = unicode(value ) # Hope for the best!
         handler.addQuickElement(field_name, unicode(value))
+        
 
     if ob.isPrincipiaFolderish:
         for subob in ob.objectValues():
