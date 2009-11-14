@@ -34,20 +34,23 @@ def run(app):
 def export(handler, ob, out):
     handler.startElement(ob.meta_type, {})
     for field in ob.Schema().filterFields():
+        field_name = field.getName()
         try:
             value = field.get(ob)
         except ConflictError:
             raise
         except:
-            logger.warn('Problem getting value for %s on %s' % (field.getName(), 
+            logger.warn('Problem getting value for %s on %s' % (field_name, 
                 '/'.join(ob.getPhysicalPath())))
             continue
             
         if value is None:
             continue
         if isinstance(value, (list, tuple)):
+            handler.startElement(field_name, {})
             for item in value:
                 handler.addQuickElement('sequence-item', item)
+            handler.endElement(field_name)
             continue
         elif isinstance(value, DateTime):
             value = value.rfc822()
@@ -56,7 +59,7 @@ def export(handler, ob, out):
             value = value.decode('utf-8')
         if not isinstance(value, unicode):
             value = unicode(value ) # Hope for the best!
-        handler.addQuickElement(field.getName(), unicode(value))
+        handler.addQuickElement(field_name, unicode(value))
 
     if ob.isPrincipiaFolderish:
         for subob in ob.objectValues():
