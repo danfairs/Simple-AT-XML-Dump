@@ -78,10 +78,10 @@ def export(handler, ob, out, dt):
         r = dt.getDiscussionFor(ob)
         if r.objectIds():
             acl_users = getToolByName(ob, 'acl_users')
-            
+            mt = getToolByName(ob, 'portal_membership')
             handler.startElement('discussion', {})
             for reply in r.objectValues():
-                export_discussion(handler, reply, dt, acl_users)
+                export_discussion(handler, reply, dt, mt, acl_users)
             handler.endElement('discussion')
 
     if ob.isPrincipiaFolderish:
@@ -89,12 +89,13 @@ def export(handler, ob, out, dt):
             export(handler, subob, out, dt)
     handler.endElement(ob.meta_type)
     
-def export_discussion(handler, ob, dt, acl_users):
+def export_discussion(handler, ob, dt, mt, acl_users):
     handler.startElement('reply', {})
     for creator in ob.listCreators():
         user = acl_users.getUserById(creator)
         handler.startElement('creator', {})
         handler.addQuickElement('id', user.getId())
+        handler.addQuickElement('name', mt.getMemberInfo(user.getId())['fullname'])
         handler.endElement('creator')
     handler.addQuickElement('text', ob.text, {'text-format': ob.text_format})        
     handler.addQuickElement('date', ob.modified().rfc822())
